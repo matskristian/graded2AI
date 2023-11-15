@@ -1,6 +1,6 @@
 """This module stores the game environment. Note that the snake is a part of
 the environment itself in this implementation.
-The environment state is a set of frames, we want the agent to be able to discern
+The environment state is a set of frames; we want the agent to be able to discern
 the movement of the snake as well, for which multiple frames are needed.
 We will keep track of a history of 2 frames.
 Important to manually reset the environment by user after initialization.
