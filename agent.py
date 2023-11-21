@@ -9,14 +9,15 @@ from collections import deque
 import json
 import torch
 import torch.nn.functional as F
+import torch.optim as optim
 from torch.autograd import Variable
 import tensorflow as tf
-from tensorflow.keras.regularizers import l2
+"""from tensorflow.keras.regularizers import l2
 from tensorflow.keras.optimizers import RMSprop, SGD, Adam
 import tensorflow.keras.backend as K
 from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Softmax, MaxPool2D
 from tensorflow.keras import Model
-from tensorflow.keras.regularizers import l2
+from tensorflow.keras.regularizers import l2"""
 
 
 # from tensorflow.keras.losses import Huber
@@ -42,9 +43,10 @@ def huber_loss(y_true, y_pred, delta=1):
         loss values for all points
     """
 
-    # Convert TensorFlow symbolic tensors to NumPy arrays
-    y_true_np = y_true.numpy()
-    y_pred_np = y_pred.numpy()
+    # Use TensorFlow session to evaluate symbolic tensors
+    with tf.compat.v1.Session() as sess:
+        y_true_np = sess.run(y_true)
+        y_pred_np = sess.run(y_pred)
 
     # Convert NumPy arrays to PyTorch tensors
     y_true_torch = torch.tensor(y_true_np, dtype=torch.float32)
@@ -310,8 +312,8 @@ class DeepQLearningAgent(Agent):
             self._target_net = self._agent_model()
             self.update_target_net()
 
-    def _prepare_input(self, board):
-        """Reshape input and normalize
+    """def _prepare_input(self, board):
+        Reshape input and normalize
         
         Parameters
         ----------
@@ -322,11 +324,29 @@ class DeepQLearningAgent(Agent):
         -------
         board : Numpy array
             Processed and normalized board
-        """
+        
         if (board.ndim == 3):
             board = board.reshape((1,) + self._input_shape)
         board = self._normalize_board(board.copy())
-        return board.copy()
+        return board.copy()"""
+
+    def _prepare_input(self, board):
+        """Reshape input and normalize
+
+        Parameters
+        ----------
+        board : PyTorch tensor
+            The board state to process
+
+        Returns
+        -------
+        board : PyTorch tensor
+            Processed and normalized board
+        """
+        if len(board.shape) == 3:
+            board = board.unsqueeze(0)
+        board = self._normalize_board(board)
+        return board.clone()
 
     def _get_model_outputs(self, board, model=None):
         """Get action values from the DQN model
@@ -367,7 +387,9 @@ class DeepQLearningAgent(Agent):
         """
         # return board.copy()
         # return((board/128.0 - 1).copy())
-        return board.astype(np.float32) / 4.0
+        # return board.astype(np.float32) / 4.0
+        # Convert NumPy array to PyTorch tensor and perform normalization
+        return torch.tensor(board, dtype=torch.float32) / 4.0
 
     def move(self, board, legal_moves, value=None):
         """Get the action with maximum Q value
@@ -395,8 +417,8 @@ class DeepQLearningAgent(Agent):
         -------
         model : TensorFlow Graph
             DQN model graph
-        """
-        # define the input layer, shape is dependent on the board size and frames
+
+        # define the input layer; shape is dependent on the board size and frames
         with open('model_config/{:s}.json'.format(self._version), 'r') as f:
             m = json.loads(f.read())
 
@@ -414,8 +436,6 @@ class DeepQLearningAgent(Agent):
         out = Dense(self._n_actions, activation='linear', name='action_values')(x)
         model = Model(inputs=input_board, outputs=out)
         model.compile(optimizer=RMSprop(0.0005), loss=mean_huber_loss)
-
-        """
         input_board = Input((self._board_size, self._board_size, self._n_frames,), name='input')
         x = Conv2D(16, (3,3), activation='relu', data_format='channels_last')(input_board)
         x = Conv2D(32, (3,3), activation='relu', data_format='channels_last')(x)
@@ -431,7 +451,24 @@ class DeepQLearningAgent(Agent):
         # model.compile(optimizer=RMSprop(0.0005), loss='mean_squared_error')
         """
 
-        return model
+        # Load model configuration from JSON
+        with open('model_config/{:s}.json'.format(self._version), 'r') as f:
+            m = json.loads(f.read())
+
+        # Input size
+        input_shape = m['model']['input']['shape']
+        input_size = (input_shape[2], input_shape[0], input_shape[1])  # PyTorch uses (C, H, W) convention
+
+        # Output size
+        output_size = m['model']['action_values']['out_features']
+
+        # Instantiate the model
+        model = DeepQLearningAgent(input_size, output_size)
+
+        # RMSprop optimizer
+        optimizer = optim.RMSprop(model.parameters(), lr=0.0005)
+
+        return model, optimizer
 
     def set_weights_trainable(self):
         """Set selected layers to non trainable and compile the model"""
@@ -552,7 +589,7 @@ class DeepQLearningAgent(Agent):
             loss : float
             The current error (error metric is defined in reset_models)
         """
-        s, a, r, next_s, done, legal_moves = self._buffer.sample(batch_size)
+        """s, a, r, next_s, done, legal_moves = self._buffer.sample(batch_size)
         if (reward_clip):
             r = np.sign(r)
         # calculate the discounted reward, and then train accordingly
@@ -570,7 +607,54 @@ class DeepQLearningAgent(Agent):
         # fit
         loss = self._model.train_on_batch(self._normalize_board(s), target)
         # loss = round(loss, 5)
-        return loss
+        return loss"""
+
+        s, a, r, next_s, done, legal_moves = self._buffer.sample(batch_size)
+        if reward_clip:
+            r = torch.sign(torch.tensor(r, dtype=torch.float32)).numpy()  # Convert PyTorch tensor to NumPy array
+
+        legal_moves = torch.tensor(legal_moves, dtype=torch.float32)  # Convert NumPy array to PyTorch tensor
+
+        current_model = self._target_net if self._use_target_net else self._model
+        next_model_outputs = self._get_model_outputs(next_s, current_model)
+        next_model_outputs = torch.tensor(next_model_outputs, dtype=torch.float32).numpy()
+
+        # If r has more than 2 dimensions, squeeze it to 2D
+        r = np.squeeze(r)
+
+        # Create the target variable, only the column with the action has a different value
+        target = self._get_model_outputs(s)
+
+        # Our estimate of expected future discounted reward
+        discounted_reward_component = (
+                                              self._gamma * np.max(
+                                          np.where(legal_moves == 1, next_model_outputs, -np.inf), axis=1)
+                                      ).reshape(-1, 1) * (1 - done)
+
+        # Expand discounted_reward_component to match the number of actions
+        discounted_reward_component = np.tile(discounted_reward_component, (1, target.shape[1]))
+
+        # Overwrite the relevant columns of the target with discounted_reward_component
+        target[:, :discounted_reward_component.shape[1]] = discounted_reward_component
+
+        # We bother only with the difference in reward estimate at the selected action
+        target = (1 - a) * target + a * discounted_reward_component
+
+        # Convert to PyTorch tensors
+        s_tensor = torch.tensor(s, dtype=torch.float32)
+        target_tensor = torch.tensor(target, dtype=torch.float32)
+
+        # Forward pass
+        predictions = self._model(self._normalize_board(s_tensor))
+
+        # Calculate loss
+        loss = F.mse_loss(predictions, target_tensor)
+
+        # Backward pass and optimization
+        loss.backward()
+
+        # Return loss
+        return loss.item()
 
     def update_target_net(self):
         """Update the weights of the target network, which is kept
