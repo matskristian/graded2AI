@@ -1,6 +1,7 @@
 """
 store all the agents here
 """
+import replay_buffer
 from replay_buffer import ReplayBuffer, ReplayBufferNumpy
 import numpy as np
 import time
@@ -10,8 +11,10 @@ import json
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+import torch.nn as nn
 from torch.autograd import Variable
 import tensorflow as tf
+
 """from tensorflow.keras.regularizers import l2
 from tensorflow.keras.optimizers import RMSprop, SGD, Adam
 import tensorflow.keras.backend as K
@@ -79,7 +82,7 @@ def mean_huber_loss(y_true, y_pred, delta=1):
     return torch.mean(huber_loss(y_true, y_pred, delta))
 
 
-class Agent():
+class Agent(nn.Module):
     """Base class for all agents
     This class extends to the following classes
     DeepQLearningAgent
@@ -114,9 +117,9 @@ class Agent():
         model version string
     """
 
-    def __init__(self, board_size=10, frames=2, buffer_size=10000,
-                 gamma=0.99, n_actions=3, use_target_net=True,
-                 version=''):
+    def __init__(self, board_size=10, frames=2, buffer_size=10000, gamma=0.99, n_actions=3, use_target_net=True,
+                 max_size=10000,
+                 version='17.1', *args, **kwargs):
         """ initialize the agent
 
         Parameters
@@ -133,13 +136,17 @@ class Agent():
             Count of actions available in env
         use_target_net : bool, optional
             Whether to use target network, necessary for DQN convergence
-        version : str, optional except NN based models
+            version : str, optional except NN based models
             path to the model architecture json
         """
+        super().__init__(*args, **kwargs)
         self._board_size = board_size
         self._n_frames = frames
         self._buffer_size = buffer_size
         self._n_actions = n_actions
+        self._current_size = 0
+        self._current_index = 0
+        self._max_size = max_size
         self._gamma = gamma
         self._use_target_net = use_target_net
         self._input_shape = (self._board_size, self._board_size, self._n_frames)
@@ -200,9 +207,32 @@ class Agent():
             Binary indicator for game termination
         legal_moves : Numpy array
             Binary indicators for actions which are allowed at next states
-        """
-        self._buffer.add_to_buffer(board, action, reward, next_board,
-                                   done, legal_moves)
+"""
+        """self._buffer.add_to_buffer(board, action, reward, next_board,
+                                   done, legal_moves)"""
+        """Add current game step to the replay buffer."""
+        """Add current game step to the replay buffer."""
+        if self._buffer_size < self.get_buffer_size():
+            # Convert legal_moves to a one-hot encoded array
+            legal_moves_one_hot = np.zeros((legal_moves.shape[0], self._n_actions), dtype=np.float32)
+            legal_moves_one_hot[np.arange(legal_moves.shape[0]), legal_moves[:, 0]] = 1
+        else:
+            # If the buffer is full, overwrite the oldest entry
+            legal_moves_one_hot = np.zeros((legal_moves.shape[0], self._n_actions), dtype=np.float32)
+            legal_moves_one_hot[np.arange(legal_moves.shape[0]), legal_moves[:, 0]] = 1
+
+        idx = self._current_index % self._max_size
+        # Extract a specific board, action, reward, and next_board from the larger arrays
+        self._board[idx] = board[0]  # Assuming you want the first board from the batch
+        self._action[idx] = action[0] if len(action) > 0 else 0  # Assuming you want the first value from action
+        self._reward[idx] = reward[0] if len(reward) > 0 else 0  # Assuming you want the first value from reward
+        self._next_board[idx] = next_board[0]  # Assuming you want the first next_board from the batch
+        self._done[idx] = bool(done[0])  # Assuming you want the first value from done
+        self._legal_moves[idx] = legal_moves_one_hot[0]  # Assuming you want the first legal_moves from the batch
+
+        if self._buffer_size < self.get_buffer_size():
+            self._current_size += 1
+        self._current_index += 1
 
     def save_buffer(self, file_path='', iteration=None):
         """Save the buffer to disk
@@ -291,60 +321,118 @@ class DeepQLearningAgent(Agent):
         Stores the graph of the DQN model
     _target_net : TensorFlow Graph
         Stores the target network graph of the DQN model
-    """
+
 
     def __init__(self, board_size=10, frames=4, buffer_size=10000,
                  gamma=0.99, n_actions=3, use_target_net=True,
                  version=''):
-        """Initializer for DQN agent, arguments are same as Agent class
+        Initializer for DQN agent, arguments are same as Agent class
         except use_target_net is by default True and we call and additional
         reset models method to initialize the DQN networks
-        """
+
         Agent.__init__(self, board_size=board_size, frames=frames, buffer_size=buffer_size,
                        gamma=gamma, n_actions=n_actions, use_target_net=use_target_net,
                        version=version)
-        self.reset_models()
+        self.reset_models()"""
+
+    def __init__(self, board_size=10, frames=4, n_actions=3, buffer_size=10000, gamma=0.99, use_target_net=True,
+                 version='17.1'):
+
+        super(DeepQLearningAgent, self).__init__()
+        # Your neural network layers here
+        self.conv1 = nn.Conv2d(10, 16, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.flatten = nn.Flatten()
+        #self.fc1 = nn.Linear(64 * board_size * board_size, 64)
+        self.fc1 = nn.Linear(640, 64)
+        self.fc2 = nn.Linear(64, n_actions)
+
+        # Other attributes
+        self._board_size = board_size
+        self._frames = frames
+        self._n_actions = n_actions
+        self._buffer_size = buffer_size
+        self._gamma = gamma
+        self._use_target_net = use_target_net
+        self._version = version
+
+        # Initialize the optimizer
+        self.optimizer = optim.RMSprop(self.parameters(), lr=0.0005)
+
+        # New attributes for replay buffer
+        self._board = np.zeros((buffer_size, board_size, board_size, frames), dtype=np.float32)
+        self._action = np.zeros(buffer_size, dtype=np.int32)
+        self._reward = np.zeros(buffer_size, dtype=np.float32)
+        self._next_board = np.zeros((buffer_size, board_size, board_size, frames), dtype=np.float32)
+        self._done = np.zeros(buffer_size, dtype=np.float32)
+        self._legal_moves = np.zeros((buffer_size, n_actions), dtype=np.float32)
+        self._max_size = buffer_size
+        self._current_size = 0
+        self._current_index = 0
+        self._buffer = replay_buffer.ReplayBufferNumpy(buffer_size, board_size, frames, n_actions)
+
+    """def forward(self, x):
+        print("Input Shape:", x.shape)
+        x = F.relu(self.conv1(x))
+        print("After Conv1 Shape:", x.shape)
+        x = F.relu(self.conv2(x))
+        print("After Conv2 Shape:", x.shape)
+
+        # Flatten the tensor before passing through fully connected layers
+        x = self.flatten(x)
+        print("After Flatten Shape:", x.shape)
+
+        x = F.relu(self.fc1(x))
+        print("After FC1 Shape:", x.shape)
+        x = self.fc2(x)
+        print("After FC2 Shape:", x.shape)
+        return x"""
+
+    def forward(self, x):
+        print("Input Shape:", x.shape)
+        x = F.relu(self.conv1(x))
+        print("After Conv1 Shape:", x.shape)
+        x = F.relu(self.conv2(x))
+        print("After Conv2 Shape:", x.shape)
+        x = self.flatten(x)  # Add this line to flatten the output
+        print("After Flatten Shape:", x.shape)
+        x = F.relu(self.fc1(x))
+        print("After FC1 Shape:", x.shape)
+        x = self.fc2(x)
+        print("After FC2 Shape:", x.shape)
+        return x
+
+    def parameters(self):
+        return list(self.conv1.parameters()) + list(self.conv2.parameters()) + list(self.conv3.parameters()) + \
+            list(self.fc1.parameters()) + list(self.fc2.parameters())
 
     def reset_models(self):
         """ Reset all the models by creating new graphs"""
-        self._model = self._agent_model()
-        if (self._use_target_net):
-            self._target_net = self._agent_model()
-            self.update_target_net()
-
-    """def _prepare_input(self, board):
-        Reshape input and normalize
-        
-        Parameters
-        ----------
-        board : Numpy array
-            The board state to process
-
-        Returns
-        -------
-        board : Numpy array
-            Processed and normalized board
-        
-        if (board.ndim == 3):
-            board = board.reshape((1,) + self._input_shape)
-        board = self._normalize_board(board.copy())
-        return board.copy()"""
+        self._model, _ = self._agent_model()
+        if self._use_target_net:
+            _, self._target_net = self._agent_model()
+        self.update_target_net()  # copy weights from model to a target network
 
     def _prepare_input(self, board):
         """Reshape input and normalize
 
-        Parameters
-        ----------
-        board : PyTorch tensor
-            The board state to process
+            Parameters
+            ----------
+            board : PyTorch tensor
+                The board state to process
 
-        Returns
-        -------
-        board : PyTorch tensor
-            Processed and normalized board
-        """
+            Returns
+            -------
+            board : PyTorch tensor
+                Processed and normalized board
+            """
         if len(board.shape) == 3:
-            board = board.unsqueeze(0)
+            # Assuming the shape is [height, width, channels], change it to [channels, height, width]
+            board = np.transpose(board, (2, 0, 1))
+            board = board.reshape(1, *board.shape)  # Add batch dimension
+
+
         board = self._normalize_board(board)
         return board.clone()
 
@@ -363,13 +451,28 @@ class DeepQLearningAgent(Agent):
         model_outputs : Numpy array
             Predicted model outputs on board, 
             of shape board.shape[0] * num actions
-        """
-        # to correct dimensions and normalize
+
+         # to correct dimensions and normalize
         board = self._prepare_input(board)
         # the default model to use
         if model is None:
             model = self._model
         model_outputs = model.predict_on_batch(board)
+
+        return model_outputs"""
+
+        # to correct dimensions and normalize
+        board = self._prepare_input(board)
+        # the default model to use
+        if model is None:
+            model = self
+
+        # Use the PyTorch model for prediction
+        model_outputs = model(board)
+
+        # Convert the PyTorch tensor to a NumPy array
+        model_outputs = model_outputs.detach().numpy()
+
         return model_outputs
 
     def _normalize_board(self, board):
@@ -463,11 +566,8 @@ class DeepQLearningAgent(Agent):
         output_size = m['model']['action_values']['out_features']
 
         # Instantiate the model
-        model = DeepQLearningAgent(input_size, output_size)
-
-        # RMSprop optimizer
+        model = DeepQLearningAgent(self._board_size, self._frames, self._n_actions)
         optimizer = optim.RMSprop(model.parameters(), lr=0.0005)
-
         return model, optimizer
 
     def set_weights_trainable(self):
@@ -615,7 +715,7 @@ class DeepQLearningAgent(Agent):
 
         legal_moves = torch.tensor(legal_moves, dtype=torch.float32)  # Convert NumPy array to PyTorch tensor
 
-        current_model = self._target_net if self._use_target_net else self._model
+        current_model = self  # No need for _target_net in PyTorch
         next_model_outputs = self._get_model_outputs(next_s, current_model)
         next_model_outputs = torch.tensor(next_model_outputs, dtype=torch.float32).numpy()
 
@@ -661,8 +761,8 @@ class DeepQLearningAgent(Agent):
         static for a few iterations to stabilize the other network.
         This should not be updated very frequently
         """
-        if (self._use_target_net):
-            self._target_net.set_weights(self._model.get_weights())
+        if self._use_target_net:
+            self._target_net.load_state_dict(self.state_dict())
 
     def compare_weights(self):
         """Simple utility function to heck if the model and target 
@@ -693,18 +793,27 @@ class PolicyGradientAgent(DeepQLearningAgent):
         defines the policy update function to use while training
     """
 
-    def __init__(self, board_size=10, frames=4, buffer_size=10000,
+    """def __init__(self, board_size=10, frames=4, buffer_size=10000,
                  gamma=0.99, n_actions=3, use_target_net=False,
                  version=''):
-        """Initializer for PolicyGradientAgent, similar to DeepQLearningAgent
+        Initializer for PolicyGradientAgent, similar to DeepQLearningAgent
         but does an extra assignment to the training function
-        """
+        
         DeepQLearningAgent.__init__(self, board_size=board_size, frames=frames,
                                     buffer_size=buffer_size, gamma=gamma,
                                     n_actions=n_actions, use_target_net=False,
                                     version=version)
         self._actor_optimizer = torch.optim.Adam(self._model.parameters(), lr=1e-6)
-        # tf.keras.optimizer.Adam(1e-6)
+        # tf.keras.optimizer.Adam(1e-6)"""
+
+    def __init__(self, board_size=10, frames=4, buffer_size=10000,
+                 gamma=0.99, n_actions=3, use_target_net=False,
+                 version=''):
+        super(PolicyGradientAgent, self).__init__(board_size, frames,
+                                                  buffer_size, gamma,
+                                                  n_actions, use_target_net,
+                                                  version)
+        self._actor_optimizer = torch.optim.Adam(self._model.parameters(), lr=1e-6)
 
     def _agent_model(self):
         """Returns the model which evaluates prob values for a given state input
@@ -716,7 +825,7 @@ class PolicyGradientAgent(DeepQLearningAgent):
         model : TensorFlow Graph
             Policy Gradient model graph
         """
-        input_board = Input((self._board_size, self._board_size, self._n_frames,))
+        """input_board = Input((self._board_size, self._board_size, self._n_frames,))
         x = Conv2D(16, (4, 4), activation='relu', data_format='channels_last', kernel_regularizer=l2(0.01))(input_board)
         x = Conv2D(32, (4, 4), activation='relu', data_format='channels_last', kernel_regularizer=l2(0.01))(x)
         x = Flatten()(x)
@@ -727,6 +836,18 @@ class PolicyGradientAgent(DeepQLearningAgent):
         # do not compile the model here, but rather use the outputs separately
         # in a training function to create any custom loss function
         # model.compile(optimizer = RMSprop(0.0005), loss = 'mean_squared_error')
+        return model"""
+        input_channels = self._n_frames
+        model = DeepQLearningAgent.Sequential(
+            DeepQLearningAgent.Conv2d(input_channels, 16, kernel_size=4, stride=4),
+            DeepQLearningAgent.ReLU(),
+            DeepQLearningAgent.Conv2d(16, 32, kernel_size=4, stride=4),
+            DeepQLearningAgent.ReLU(),
+            DeepQLearningAgent.Flatten(),
+            DeepQLearningAgent.Linear(32 * 4 * 4, 64),
+            DeepQLearningAgent.ReLU(),
+            DeepQLearningAgent.Linear(64, self._n_actions)
+        )
         return model
 
     def train_agent(self, batch_size=32, beta=0.1, normalize_rewards=False,
@@ -780,7 +901,26 @@ class AdvantageActorCriticAgent(PolicyGradientAgent):
         Custom function to prepare the 
     """
 
+    """def __init__(self, board_size=10, frames=4, buffer_size=10000,
+                 gamma=0.99, n_actions=3, use_target_net=True,
+                 version=''):
+        super(AdvantageActorCriticAgent, self).__init__(board_size, frames,
+                                                        buffer_size, gamma,
+                                                        n_actions, use_target_net,
+                                                        version)
+        self._model_logits, self._model_full, self._model_values = self._agent_model()
+        self._optimizer = torch.optim.RMSprop(self.parameters(), lr=5e-4)"""
+
     def __init__(self, board_size=10, frames=4, buffer_size=10000,
+                 gamma=0.99, n_actions=3, use_target_net=True,
+                 version=''):
+        super(AdvantageActorCriticAgent, self).__init__(board_size, frames,
+                                                        buffer_size, gamma,
+                                                        n_actions, use_target_net,
+                                                        version)
+        self._optimizer = torch.optim.RMSprop(self._model.parameters(), lr=5e-4)
+
+    """def __init__(self, board_size=10, frames=4, buffer_size=10000,
                  gamma=0.99, n_actions=3, use_target_net=True,
                  version=''):
         DeepQLearningAgent.__init__(self, board_size=board_size, frames=frames,
@@ -788,7 +928,7 @@ class AdvantageActorCriticAgent(PolicyGradientAgent):
                                     n_actions=n_actions, use_target_net=use_target_net,
                                     version=version)
         self._optimizer = torch.optim.RMSprop(self.parameters(), lr=5e-4)
-        # tf.keras.optimizers.RMSprop(5e-4)
+        # tf.keras.optimizers.RMSprop(5e-4)"""
 
     def _agent_model(self):
         """Returns the models which evaluate prob logits and action values 
@@ -802,7 +942,7 @@ class AdvantageActorCriticAgent(PolicyGradientAgent):
         model_full : TensorFlow Graph
             A2C model complete graph
         """
-        input_board = Input((self._board_size, self._board_size, self._n_frames,))
+        """input_board = Input((self._board_size, self._board_size, self._n_frames,))
         x = Conv2D(16, (3, 3), activation='relu', data_format='channels_last')(input_board)
         x = Conv2D(32, (3, 3), activation='relu', data_format='channels_last')(x)
         x = Flatten()(x)
@@ -815,7 +955,29 @@ class AdvantageActorCriticAgent(PolicyGradientAgent):
         model_values = Model(inputs=input_board, outputs=state_values)
         # updates are calculated in the train_agent function
 
-        return model_logits, model_full, model_values
+        return model_logits, model_full, model_values"""
+        input_channels = self._n_frames
+        shared_layers = nn.Sequential(
+            nn.Conv2d(input_channels, 16, kernel_size=3),
+            nn.ReLU(),
+            nn.Conv2d(16, 32, kernel_size=3),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(32 * 6 * 6, 64),
+            nn.ReLU()
+        )
+
+        actor = nn.Sequential(
+            shared_layers,
+            nn.Linear(64, self._n_actions)
+        )
+
+        critic = nn.Sequential(
+            shared_layers,
+            nn.Linear(64, 1)
+        )
+
+        return actor, nn.ModuleList([actor, critic]), critic
 
     def reset_models(self):
         """ Reset all the models by creating new graphs"""
@@ -1212,10 +1374,10 @@ class SupervisedLearningAgent(DeepQLearningAgent):
 
     Attributes
     ----------
-    _model_action_out : TensorFlow Softmax layer
+    _model_action_out : PyTorch Softmax layer
         A softmax layer on top of the DQN model to train as a classification
         problem (instead of regression)
-    _model_action : TensorFlow Model
+    _model_action : PyTorch Model
         The model that will be trained and is simply DQN model + softmax
     """
 
@@ -1225,21 +1387,33 @@ class SupervisedLearningAgent(DeepQLearningAgent):
         """Initializer for SupervisedLearningAgent, similar to DeepQLearningAgent
         but creates extra layer and model for classification training
         """
-        DeepQLearningAgent.__init__(self, board_size=board_size, frames=frames, buffer_size=buffer_size,
-                                    gamma=gamma, n_actions=n_actions, use_target_net=use_target_net,
-                                    version=version)
-        # define model with softmax activation, and use action as target
+        super(SupervisedLearningAgent, self).__init__(board_size=board_size, frames=frames,
+                                                      buffer_size=buffer_size, gamma=gamma,
+                                                      n_actions=n_actions, use_target_net=use_target_net,
+                                                      version=version)
+
+        # Define model with softmax activation, and use action as target
         # instead of the reward value
-        self._model_action_out = Softmax()(self._model.get_layer('action_values').output)
-        self._model_action = Model(inputs=self._model.get_layer('input').input, outputs=self._model_action_out)
-        self._model_action.compile(optimizer=Adam(0.0005), loss='categorical_crossentropy')
+        self._model_action = nn.Sequential(
+            nn.Conv2d(self._n_frames, 16, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(16, 32, kernel_size=2, stride=1),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(32 * 2 * 2, 64),
+            nn.ReLU(),
+            nn.Linear(64, self._n_actions)
+        )
+
+        self._model_action_out = nn.Softmax(dim=1)
+        self._optimizer_action = optim.Adam(self._model_action.parameters(), lr=0.0005)
 
     def train_agent(self, batch_size=32, num_games=1, epochs=5,
                     reward_clip=False):
         """Train the model by sampling from buffer and return the error.
         _model_action is trained as a classification problem to learn weights
         for all the layers of the DQN model
-        
+
         Parameters
         ----------
         batch_size : int, optional
@@ -1253,15 +1427,25 @@ class SupervisedLearningAgent(DeepQLearningAgent):
 
         Returns
         -------
-            loss : float
+        loss : float
             The current error (error metric is cross entropy)
         """
         s, a, _, _, _, _ = self._buffer.sample(self.get_buffer_size())
-        # fit using the actions as assumed to be best
-        history = self._model_action.fit(self._normalize_board(s), a, epochs=epochs)
-        loss = round(history.history['loss'][-1], 5)
-        # loss = self._model_action.evaluate(self._normalize_board(s), a, verbose=0)
-        return loss
+
+        # Convert to PyTorch tensors
+        s = torch.FloatTensor(self._normalize_board(s))
+        a = torch.LongTensor(np.argmax(a, axis=1))
+
+        # Train the classification model
+        for epoch in range(epochs):
+            logits = self._model_action(s)
+            loss = F.cross_entropy(logits, a)
+
+            self._optimizer_action.zero_grad()
+            loss.backward()
+            self._optimizer_action.step()
+
+        return loss.item()
 
     def get_max_output(self):
         """Get the maximum output of Q values from the model
@@ -1276,7 +1460,7 @@ class SupervisedLearningAgent(DeepQLearningAgent):
             The maximum output produced by the network (_model)
         """
         s, _, _, _, _, _ = self._buffer.sample(self.get_buffer_size())
-        max_value = np.max(np.abs(self._model.predict(self._normalize_board(s))))
+        max_value = np.max(np.abs(self._model_action(s).detach().numpy()))
         return max_value
 
     def normalize_layers(self, max_value=None):
@@ -1289,12 +1473,13 @@ class SupervisedLearningAgent(DeepQLearningAgent):
             Value by which to divide, assumed to be 1 if None
         """
         # normalize output layers by this value
-        if (max_value is None or np.isnan(max_value)):
+        if max_value is None or np.isnan(max_value):
             max_value = 1.0
-        # dont normalize all layers as that will shrink the
+        # don't normalize all layers as that will shrink the
         # output proportional to the no of layers
-        self._model.get_layer('action_values').set_weights( \
-            [x / max_value for x in self._model.get_layer('action_values').get_weights()])
+        last_layer = list(self._model_action.children())[-1]
+        if isinstance(last_layer, nn.Linear):
+            last_layer.weight.data /= max_value
 
 
 class BreadthFirstSearchAgent(Agent):
