@@ -37,44 +37,43 @@ Key points for SnakeNumpy Class
 
 ```python
 from game_environment import SnakeNumpy
-from agent import QLearningAgent
+from agent2 import QLearningAgent
 import numpy as np
 
 game_count = 10
 
-env = Snake(board_size=10, frames=2, 
-            max_time_limit=298, games=game_count, # Allows running 10 games in parallel
-            frame_mode=False) # Allows continuous run of successive games
-state = env.reset(stateful=True) # first manual reset required to initialize few variables
+env = Snake(board_size=10, frames=2,
+            max_time_limit=298, games=game_count,  # Allows running 10 games in parallel
+            frame_mode=False)  # Allows continuous run of successive games
+state = env.reset(stateful=True)  # first manual reset required to initialize few variables
 agent = QLearningAgent(board_size=10, frames=2, n_actions=env.get_num_actions(),
                        buffer_size=10000)
 done = np.zeros((game_count,), dtype=np.uint8)
 total_reward = np.zeros((game_count,), dtype=np.uint8)
 epsilon = 0.1
-while(not done.all()):
+while (not done.all()):
     legal_moves = env.get_legal_moves()
-    if(np.random.random() <= epsilon):
+    if (np.random.random() <= epsilon):
         action = np.random.choice(np.arange(env.get_num_actions(), game_count)
-    else:
+        else:
         action = agent.move(s, legal_moves, values=env.get_values())
-    next_state, reward, done, info, next_legal_moves = env.step(action)
-    # info contains time, food (food count), termination_reason (if ends)
-    agent.add_to_buffer([state, action, reward, next_state, done, next_legal_moves])
-    total_reward += reward
-    state = next_state.copy()
-agent.train_agent(batch_size=32) # perform one step of gradient descent
-agent.update_target_net() # update the target network
+        next_state, reward, done, info, next_legal_moves = env.step(action)
+        # info contains time, food (food count), termination_reason (if ends)
+        agent.add_to_buffer([state, action, reward, next_state, done, next_legal_moves])
+        total_reward += reward
+        state = next_state.copy()
+        agent.train_agent(batch_size=32)  # perform one step of gradient descent
+        agent.update_target_net()  # update the target network
 
-
-# another way to use the environment is the frame mode
-# which allows faster accumulation of training data
-env = Snake(board_size=10, frames=2, 
-            max_time_limit=298, games=game_count,
-            frame_mode=True)
-while(True):
+        # another way to use the environment is the frame mode
+        # which allows faster accumulation of training data
+        env = Snake(board_size=10, frames=2,
+                    max_time_limit=298, games=game_count,
+                    frame_mode=True)
+while (True):
     s = env.reset(stateful=True)
     total_frames = 0
-    while(total_frames < 100):
+    while (total_frames < 100):
         """ same code as above """
         total_frames += game_count
     """ add data to buffer """

@@ -14,3 +14,4 @@ https://developer.nvidia.com/compute/cuda/10.0/Prod/local_installers/cuda_10.0.1
 https://developer.nvidia.com/compute/machine-learning/cudnn/secure/7.6.4.38/Production/10.0_20190923/cudnn-10.0-windows10-x64-v7.6.4.38.zip
 
 torch==2.1.1
+imageio~=2.33.0

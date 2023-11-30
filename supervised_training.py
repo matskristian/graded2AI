@@ -12,7 +12,7 @@ import pandas as pd
 import time
 from utils import play_game2
 from game_environment import SnakeNumpy
-from agent import BreadthFirstSearchAgent, SupervisedLearningAgent
+from agent2 import BreadthFirstSearchAgent, SupervisedLearningAgent
 import json
 
 # some global variables
