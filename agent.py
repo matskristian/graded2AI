@@ -251,14 +251,7 @@ class DeepQLearningAgent(Agent):
     model outputs everywhere refers to Q values
     This class extends to the following classes
     PolicyGradientAgent
-    AdvantageActorCriticAgent
-
-    Attributes
-    ----------
-    _model : TensorFlow Graph
-        Stores the graph of the DQN model
-    _target_net : TensorFlow Graph
-        Stores the target network graph of the DQN model"""
+    AdvantageActorCriticAgent"""
 
     def __init__(self, board_size=10, frames=4, n_actions=3, buffer_size=10000, gamma=0.99, use_target_net=True,
                  version='v17.1',
@@ -335,22 +328,7 @@ class DeepQLearningAgent(Agent):
         return board.clone()  # Return a copy of the board
 
     def _get_model_outputs(self, board, model=None):
-        """Get action values from the DQN model
-
-        Parameters
-        ----------
-        board : Numpy array
-            The board state for which to predict action values
-        model : TensorFlow Graph, optional
-            The graph to use for prediction, model or target network
-
-        Returns
-        -------
-        model_outputs : Numpy array
-            Predicted model outputs on board,
-            of shape board.shape[0] * num actions"""
-
-        # to correct dimensions and normalize
+        # Prepare the input for the model (reshape and normalize)
         board = self._prepare_input(board)
         # the default model to use
         if model is None:
@@ -399,13 +377,6 @@ class DeepQLearningAgent(Agent):
         return np.argmax(np.where(legal_moves == 1, model_outputs, -np.inf), axis=1)
 
     def _agent_model(self):
-        """Returns the model which evaluates Q values for a given state input
-
-        Returns
-        -------
-        model : TensorFlow Graph
-            DQN model graph"""
-
         # Load model configuration from JSON
         with open('model_config/{:s}.json'.format(self._version), 'r') as f:  # Load the model configuration from JSON
             m = json.loads(f.read())
