@@ -876,16 +876,15 @@ class DeepQLearningAgentNet(nn.Module):
         self._n_actions = n_actions
         self._board_size = board_size
         # define the input layer, shape is dependent on the board size and frames
-        with open('model_config/{:s}.json'.format(self.version), 'r') as f:
+        with open('model_config/v17.1.json') as f:
             m = json.loads(f.read())
         out_channels_prev = m['frames']
         layers = []
         for layer in m['model']:
             l = m['model'][layer]
-            if ('Conv2D' in layer):
+            if 'Conv2D' in layer:
                 # add convolutional layer
-                # x = Conv2D(**l)(x)
-                if "padding" in l:  # Check if "padding is in the dict
+                if 'padding' in l:
                     padding = l["padding"]
                     layers.append(
                         nn.Conv2d(in_channels=out_channels_prev, out_channels=l["filters"],
@@ -895,29 +894,23 @@ class DeepQLearningAgentNet(nn.Module):
                     layers.append(
                         nn.Conv2d(in_channels=out_channels_prev, out_channels=l["filters"],
                                   kernel_size=l["kernel_size"]))
-                    # padding = "valid"  # valid= the same as no padding
-                if "activation" in l:  # check if  relu activation in l
-                    if l['activation'] == "relu":
-                        layers.append(nn.ReLU())
-                out_channels_prev = l["filters"]  # variable to store how many out channels, for the next in_channels
+                if 'activation' in l and l['activation'] == "relu":
+                    layers.append(nn.ReLU())
+                out_channels_prev = l["filters"]
             if 'Flatten' in layer:
-                # x = Flatten()(x)
                 layers.append(nn.Flatten())
                 out_channels_prev = 64 * 4 * 4
             if 'Dense' in layer:
-                # x = Dense(**l)(x)
                 layers.append(nn.Linear(out_channels_prev, l['units']))
-                if "activation" in l:  # check if activation
-                    if l['activation'] == "relu":
-                        layers.append(nn.ReLU())
+                if 'activation' in l and l['activation'] == "relu":
+                    layers.append(nn.ReLU())
+
         self.conv = nn.Sequential(*layers)
         self.out = nn.Linear(64, self._n_actions)
-        self.criterion = mean_huber_loss
+        self.criterion = nn.SmoothL1Loss()  # Using Smooth L1 Loss as a replacement for Huber Loss
         self.optimizer = optim.RMSprop(self.parameters(), lr=0.0005)
-        # self.to('cuda')
 
     def forward(self, x: torch.Tensor):
-        # x.to('cuda')
-        # x = self.conv(x)
+        x = self.conv(x)
         output = self.out(x)
         return output

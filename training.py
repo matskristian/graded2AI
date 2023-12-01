@@ -21,7 +21,7 @@ tf.random.set_seed(42)
 version = 'v17.1'
 
 # get training configurations
-with open('model_config/{:s}.json'.format(version), 'r') as f:
+with open('model_config/v17.1.json'.format(version), 'r') as f:
     m = json.loads(f.read())
     board_size = m['board_size']
     frames = m['frames'] # keep frames >= 2
@@ -39,11 +39,6 @@ games_eval = 8
 # setup the agent
 agent = DeepQLearningAgent(board_size=board_size, frames=frames, n_actions=n_actions, 
                            buffer_size=buffer_size, version=version)
-# agent = PolicyGradientAgent(board_size=board_size, frames=frames, n_actions=n_actions, 
-        # buffer_size=2000, version=version)
-# agent = AdvantageActorCriticAgent(board_size=board_size, frames=frames, n_actions=n_actions, 
-                                  # buffer_size=10000, version=version)
-# agent.print_models()
 
 # check in the same order as class hierarchy
 if(isinstance(agent, DeepQLearningAgent)):

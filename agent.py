@@ -14,12 +14,7 @@ import torch.nn as nn
 
 
 def huber_loss(y_true, y_pred, delta=1):
-    """Keras implementation for huber loss
-    loss = {
-        0.5 * (y_true - y_pred)**2 if abs(y_true - y_pred) < delta
-        delta * (abs(y_true - y_pred) - 0.5 * delta) otherwise
-    }
-    Parameters
+    """Parameters
     ----------
     y_true : Tensor
         The true values for the regression data
@@ -27,21 +22,19 @@ def huber_loss(y_true, y_pred, delta=1):
         The predicted values for the regression data
     delta : float, optional
         The cutoff to decide whether to use quadratic or linear loss
-
     Returns
     -------
     loss : Tensor
         loss values for all points"""
 
-    error = y_true - y_pred # error is of shape (batch_size, num_actions)
-    quad_error = 0.5 * error ** 2 # shape (batch_size, num_actions)
-    lin_error = delta * (torch.abs(error) - 0.5 * delta) # shape (batch_size, num_actions)
+    error = y_true - y_pred  # error is of shape (batch_size, num_actions)
+    quad_error = 0.5 * error ** 2  # shape (batch_size, num_actions)
+    lin_error = delta * (torch.abs(error) - 0.5 * delta)  # shape (batch_size, num_actions)
     return torch.where(torch.abs(error) < delta, quad_error, lin_error)
 
 
 def mean_huber_loss(y_true, y_pred, delta=1):
     """Calculates the mean value of huber loss
-
     Parameters
     ----------
     y_true : Tensor
@@ -50,12 +43,11 @@ def mean_huber_loss(y_true, y_pred, delta=1):
         The predicted values for the regression data
     delta : float, optional
         The cutoff to decide whether to use quadratic or linear loss
-
     Returns
     -------
     loss : Tensor
         average loss across points"""
-    return torch.mean(huber_loss(y_true, y_pred, delta)) # returns a scalar
+    return torch.mean(huber_loss(y_true, y_pred, delta))  # returns a scalar
 
 
 class Agent(nn.Module):
@@ -269,16 +261,17 @@ class DeepQLearningAgent(Agent):
         Stores the target network graph of the DQN model"""
 
     def __init__(self, board_size=10, frames=4, n_actions=3, buffer_size=10000, gamma=0.99, use_target_net=True,
-                 version='v17.1', target_net=None): # Hardcoded the version in order to eliminate errors when loading the model
+                 version='v17.1',
+                 target_net=None):  # Hardcoded the version in order to eliminate errors when loading the model
 
         super(DeepQLearningAgent, self).__init__()
         # Your neural network layers here
-        self.conv1 = nn.Conv2d(10, 16, kernel_size=3, stride=1, padding=1) # 10 input channels, 16 output channels
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1) # 16 input channels, 32 output channels
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1) # 32 input channels, 64 output channels
-        self.flatten = nn.Flatten() # Flatten the output of the last convolutional layer
-        self.fc1 = nn.Linear(640, 64) # 640 input features, 64 output features
-        self.fc2 = nn.Linear(64, n_actions) # 64 input features, 3 output features (one for each action)
+        self.conv1 = nn.Conv2d(10, 16, kernel_size=3, stride=1, padding=1)  # 10 input channels, 16 output channels
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)  # 16 input channels, 32 output channels
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)  # 32 input channels, 64 output channels
+        self.flatten = nn.Flatten()  # Flatten the output of the last convolutional layer
+        self.fc1 = nn.Linear(640, 64)  # 640 input features, 64 output features
+        self.fc2 = nn.Linear(64, n_actions)  # 64 input features, 3 output features (one for each action)
 
         # Other attributes
         self._board_size = board_size
@@ -290,7 +283,7 @@ class DeepQLearningAgent(Agent):
         self._version = version
 
         # Initialize the optimizer
-        self.optimizer = optim.RMSprop(self.parameters(), lr=0.0005) # Use RMSprop optimizer with learning rate 0.0005
+        self.optimizer = optim.RMSprop(self.parameters(), lr=0.0005)  # Use RMSprop optimizer with learning rate 0.0005
 
         # Initialize the target network separately
         if use_target_net:
@@ -312,12 +305,12 @@ class DeepQLearningAgent(Agent):
 
     # Forwards the input through the network
     def forward(self, x):
-        x = F.relu(self.conv1(x)) # Apply relu activation to the output of the first convolutional layer
-        x = F.relu(self.conv2(x)) # Apply relu activation to the output of the second convolutional layer
+        x = F.relu(self.conv1(x))  # Apply relu activation to the output of the first convolutional layer
+        x = F.relu(self.conv2(x))  # Apply relu activation to the output of the second convolutional layer
         x = self.flatten(x)  # Flatten the output of the last convolutional layer
-        x = F.relu(self.fc1(x)) # Apply relu activation to the output of the first dense layer
-        x = self.fc2(x) # Apply relu activation to the output of the second dense layer
-        return x # Return the output of the network
+        x = F.relu(self.fc1(x))  # Apply relu activation to the output of the first dense layer
+        x = self.fc2(x)  # Apply relu activation to the output of the second dense layer
+        return x  # Return the output of the network
 
     # Returns the parameters of the network
     def parameters(self):
@@ -326,31 +319,20 @@ class DeepQLearningAgent(Agent):
 
     def reset_models(self):
         """ Reset all the models by creating new graphs"""
-        self._model, _ = self._agent_model() # create a new model
+        self._model, _ = self._agent_model()  # create a new model
         if self._use_target_net:
-            _, self._target_net = self._agent_model() # create a new target network
+            _, self._target_net = self._agent_model()  # create a new target network
         self.update_target_net()  # copy weights from model to a target network
 
     def _prepare_input(self, board):
-        """Reshape input and normalize
-
-            Parameters
-            ----------
-            board : PyTorch tensor
-                The board state to process
-
-            Returns
-            -------
-            board : PyTorch tensor
-                Processed and normalized board
-            """
-        if len(board.shape) == 3: # If the board has only one channel
+        """Reshape input and normalize the board"""
+        if len(board.shape) == 3:  # If the board has only one channel
             # The shape is [height, width, channels], change it to [channels, height, width]
-            board = np.transpose(board, (2, 0, 1)) # PyTorch uses (C, H, W) convention
+            board = np.transpose(board, (2, 0, 1))  # PyTorch uses (C, H, W) convention
             board = board.reshape(1, *board.shape)  # Add batch dimension
 
-        board = self._normalize_board(board) # Normalize the board
-        return board.clone() # Return a copy of the board
+        board = self._normalize_board(board)  # Normalize the board
+        return board.clone()  # Return a copy of the board
 
     def _get_model_outputs(self, board, model=None):
         """Get action values from the DQN model
@@ -425,7 +407,7 @@ class DeepQLearningAgent(Agent):
             DQN model graph"""
 
         # Load model configuration from JSON
-        with open('model_config/{:s}.json'.format(self._version), 'r') as f: # Load the model configuration from JSON
+        with open('model_config/{:s}.json'.format(self._version), 'r') as f:  # Load the model configuration from JSON
             m = json.loads(f.read())
 
         # Input size (C, H, W)
@@ -470,18 +452,6 @@ class DeepQLearningAgent(Agent):
         return model_outputs
 
     def save_model(self, file_path='', iteration=None):
-        """Save the current models to disk using tensorflow's
-        inbuilt save model function (saves in h5 format)
-        saving weights instead of model as cannot load compiled
-        model with any kind of custom object (loss or metric)
-
-        Parameters
-        ----------
-        file_path : str, optional
-            Path where to save the file
-        iteration : int, optional
-            Iteration number to tag the file name with, if None, iteration is 0
-        """
 
         if iteration is not None:
             assert isinstance(iteration, int), "iteration should be an integer"
@@ -495,24 +465,8 @@ class DeepQLearningAgent(Agent):
             torch.save(self.state_dict(), "{}/model_{:04d}_target.pth".format(file_path, iteration))
 
     def load_model(self, file_path='', iteration=None):
-        """ load any existing models, if available """
-        """Load models from disk using tensorflow's
-        inbuilt load model function (model saved in h5 format)
 
-        Parameters
-        ----------
-        file_path : str, optional
-            Path where to find the file
-        iteration : int, optional
-            Iteration number the file is tagged with, if None, iteration is 0
-
-        Raises
-        ------
-        FileNotFoundError
-            The file is not loaded if not found and an error message is printed,
-            this error does not affect the functioning of the program
-        """
-        # Load the model weights
+        # Load the model from disk
         if iteration is not None:
             assert isinstance(iteration, int), "iteration should be an integer"
         else:
@@ -534,33 +488,6 @@ class DeepQLearningAgent(Agent):
             print(self._target_net.summary())
 
     def train_agent(self, batch_size=32, num_games=1, reward_clip=False):
-        """Train the model by sampling from buffer and return the error.
-        We are predicting the expected future discounted reward for all
-        actions with our model. The target for training the model is calculated
-        in two parts:
-        1) dicounted reward = current reward +
-                        (max possible reward in next state) * gamma
-           the next reward component is calculated using the predictions
-           of the target network (for stability)
-        2) rewards for only the action take are compared, hence while
-           calculating the target, set target value for all other actions
-           the same as the model predictions
-
-        Parameters
-        ----------
-        batch_size : int, optional
-            The number of examples to sample from buffer, should be small
-        num_games : int, optional
-            Not used here, kept for consistency with other agents
-        reward_clip : bool, optional
-            Whether to clip the rewards using the numpy sign command
-            rewards > 0 -> 1, rewards <0 -> -1, rewards == 0 remain same
-            this setting can alter the learned behaviour of the agent
-
-        Returns
-        -------
-            loss : float
-            The current error (error metric is defined in reset_models)"""
 
         # Sample from the buffer and convert to PyTorch tensors for training
         s, a, r, next_s, done, legal_moves = self._buffer.sample(batch_size)
@@ -572,8 +499,9 @@ class DeepQLearningAgent(Agent):
 
         # Convert to PyTorch tensors
         current_model = self  # No need for _target_net in PyTorch
-        next_model_outputs = self._get_model_outputs(next_s, current_model) # Get the model outputs for next state
-        next_model_outputs = torch.tensor(next_model_outputs, dtype=torch.float32).numpy() # Convert PyTorch tensor to NumPy array
+        next_model_outputs = self._get_model_outputs(next_s, current_model)  # Get the model outputs for next state
+        next_model_outputs = torch.tensor(next_model_outputs,
+                                          dtype=torch.float32).numpy()  # Convert PyTorch tensor to NumPy array
 
         # If r has more than 2 dimensions, squeeze it to 2D
         r = np.squeeze(r)
