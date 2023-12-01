@@ -8,6 +8,16 @@ Sample games from the best performing [agent](../models/v15.1/model_188000.h5)<b
 <img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v15.1_188000_1.gif" alt="model v15.1 agent" ><img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v15.1_188000_5.gif" alt="model v15.1 agent" >
 <img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v15.1_188000_6.gif" alt="model v15.1 agent" ><img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v15.1_188000_11.gif" alt="model v15.1 agent" >
 ***
+##  Additional dependencies
+I have added some additional dependancies:
+- numpy==1.26.2
+- scipy==1.11.4
+- pandas==2.1.3
+- matplotlib==3.8.2
+- tensorflow==2.15.0
+- keras==3.0.0
+- torch==2.1.1
+- imageio~=2.33.0
 
 ## Code Structure
 [game_environment.py](../game_environment.py) contains the necessary code to create and interact with the snake environment (class Snake and SnakeNumpy). The interface is similar to openai gym interface.
@@ -124,3 +134,7 @@ Sample game from the best [model](../models/v17.1/model_163500.h5) on empty boar
 
 Sample game from the best [model](../models/v17.1/model_163500.h5) on board with more obstacles<br>
 <img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v17.1_163500_14_ob_3.gif" alt="model v17.1 agent">
+
+
+
+

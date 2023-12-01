@@ -57,7 +57,7 @@ import json
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import numpy as np
-from agent2 import DeepQLearningAgent  # Import your agent class
+from agent3 import DeepQLearningAgent  # Import your agent class
 from game_environment import Snake  # Import your environment class
 from utils import visualize_game, anim_frames_func
 import matplotlib.pyplot as plt

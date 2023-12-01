@@ -633,8 +633,8 @@ class DeepQLearningAgent(Agent):
         try:
             self.load_state_dict(torch.load("{}/model_{:04d}.pth".format(file_path, iteration)))
 
-            if self._use_target_net:
-                self._target_net.load_state_dict(torch.load("{}/model_{:04d}_target.pth".format(file_path, iteration)))
+            """if self._use_target_net:
+                self._target_net.load_state_dict(torch.load("{}/model_{:04d}_target.pth".format(file_path, iteration)))"""
 
         except FileNotFoundError:
             print("Couldn't locate models at {}, check provided path".format(file_path))
